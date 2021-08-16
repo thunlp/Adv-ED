@@ -45,10 +45,8 @@ def test(dataset):
     for words,inMask,maskL,maskR,label in dataset.batchs():
         scores=discriminator(words.cuda(),inMask.cuda(),maskL.cuda(),maskR.cuda())
         pred=torch.argmax(scores,dim=1).cpu().numpy()
-        #print(pred)
         preds.append(pred)
         labels.append(label.numpy())
-        #times=times+np.equal(pred,label.numpy())
     cnt=0
     cnt1=0
     FN=0
@@ -66,7 +64,6 @@ def test(dataset):
             if labels[i]==0:
                 cnt1+=1
             if preds[i]!=labels[i]:
-                #print("%d %d"%(preds[i],labels[i]))
                 cnt+=1
                 if preds[i]==0 and labels[i]!=0:
                     FN+=1
@@ -75,7 +72,6 @@ def test(dataset):
         print("EVAL %s #Wrong %d #NegToPos %d #PosToNeg %d #All %d #Negs %d"%("Test",cnt,FP,FN,len(preds),cnt1))
     acc=precision_score(labels,preds,labels=list(range(1,34)),average="micro")
     f1=f1_score(labels,preds,labels=list(range(1,34)),average="micro")
-#    print(preds,labels)
     print(acc,f1)
     global bst
     if f1>bst and dataset==TestSet:
@@ -83,28 +79,6 @@ def test(dataset):
         torch.save(discriminator.state_dict(),"Dmodel.tar")
         bst=f1
     return f1
-
-'''
-def train(dataset):
-    opt=optim.Adadelta(model.parameters(),lr=lr,rho=0.95,eps=1e-06)
-    criterion=nn.CrossEntropyLoss().cuda()
-    test(TestSet)
-    for i in range(0,Epoch):
-        loss_sum=0.0
-        model.train()
-        for words,pos,loc,maskL,maskR,label in dataset.batchs():
-            scores=model(words.cuda(),pos.cuda(),loc.cuda(),maskL.cuda(),maskR.cuda())
-            opt.zero_grad()
-            loss=criterion(scores,label.cuda())
-            loss.backward()
-            #print(model.word_emb.weight.grad)
-            opt.step()
-            loss_sum+=loss.item()
-        f=test(TestSet)
-        f2=test(TrainSet)
-        global bst
-        print("Epoch %d Loss %f F1 %f %f BST %f"%(i,loss_sum,f,f2,bst))
-'''
 def genMask(idx):
     res=[]
     idx=idx.numpy()
@@ -117,7 +91,6 @@ def Dscore_G(nwords,nMask,nmaskL,nmaskR,nlabel,uwords,uMask,umaskL,umaskR,ulabel
     nScores=F.sigmoid(discriminator(nwords.cuda(),nMask.cuda(),nmaskL.cuda(),nmaskR.cuda()))
     nScores=nScores[:,nonNAindex]
     nScores=torch.mean(nScores,dim=1)
-    #print(uwords.size())
     if uwords.size(0)==0:
         return nScores
     uScores=F.sigmoid(discriminator(uwords.cuda(),uMask.cuda(),umaskL.cuda(),umaskR.cuda()))
@@ -125,7 +98,7 @@ def Dscore_G(nwords,nMask,nmaskL,nmaskR,nlabel,uwords,uMask,umaskL,umaskR,ulabel
     uScores=torch.masked_select(uScores,umask)
     return torch.cat((nScores,uScores),dim=0)
 def genLoss(nwords,nMask,nmaskL,nmaskR,nlabel,uwords,uMask,umaskL,umaskR,ulabel):
-    dScores=Dscore_G(nwords,npos,nloc,nmaskL,nmaskR,nlabel,uwords,upos,uloc,umaskL,umaskR,ulabel)
+    dScores=Dscore_G(nwords,nMask,nmaskL,nmaskR,nlabel,uwords,uMask,umaskL,umaskR,ulabel)
     words=torch.cat((nwords,uwords),0)
     inMask=torch.cat((nMask,uMask),0)
     maskL=torch.cat((nmaskL,umaskL),0)
@@ -143,26 +116,13 @@ def trainGen(unconfIter):
     return sLoss.item()
 def disConfLoss(words,inMask,maskL,maskR,label):
     dScores=F.sigmoid(discriminator(words.cuda(),inMask.cuda(),maskL.cuda(),maskR.cuda()))
-    #print("DisConfLoss")
-    #print("label")
-    #print(label)
     mask=genMask(label).cuda()
-    #print("mask")
-    #print(mask)
     dScores=torch.masked_select(dScores,mask)
-    #print("dScores")
-    #print(dScores)
-    #print(-torch.mean(torch.log(dScores)))
     return -torch.mean(torch.log(dScores))
 def disUnconfLoss(words,inMask,maskL,maskR,label):
     cScores=selector(words.cuda(),inMask.cuda(),maskL.cuda(),maskR.cuda())
-    #print("DisUnconfloss")
-    #print("label")
-    #print(label)
     cScores=torch.pow(cScores,alpha)
     cScores=F.softmax(cScores,dim=0)
-    #print("cScores")
-    #print(cScores)
     dScores=F.sigmoid(discriminator(words.cuda(),inMask.cuda(),maskL.cuda(),maskR.cuda()))
     mask=genMask(label).cuda()
     dScores=torch.masked_select(dScores,mask)
@@ -186,11 +146,7 @@ def testCnt(joinSet):
     for words,inMask,maskL,maskR,label,bound in joinSet.unconf_batch():
         scores=discriminator(words.cuda(),inMask.cuda(),maskL.cuda(),maskR.cuda())
         pred=torch.argmax(scores,dim=1).cpu().numpy()
-        #print(times)
-        #print(np.equal(pred,label.numpy()))
         joinSet.utimes[bound[0]:bound[1]]+=np.equal(pred,label.numpy())
-        #times=times+np.equal(pred,label.numpy())
-        #print(times)
 def train():
     unconfSet=uDataset("TrainA_unconf")
     joinSet=joinDataset("TrainA_conf","TrainA_unconf")
